@@ -9,7 +9,6 @@ async fn main() -> std::io::Result<()>{
     //rust环境变量配置
     dotenv::dotenv().ok();
     env_logger::init();
-    log::info!("Starting server at");
 
     //TODO: database wait to be connnected
 
