@@ -1,7 +1,5 @@
 use std::io::Cursor;
-
 use epub::doc::EpubDoc;
-
 use super::model::Book;
 
 pub struct Epub {
@@ -24,6 +22,7 @@ impl Epub {
         self.data.mdata("title").clone()
     }
 
+    #[allow(unused)]
     pub fn get_cover(&mut self) -> Option<(Vec<u8>, String)> {
         self.data.get_cover().clone()
     }

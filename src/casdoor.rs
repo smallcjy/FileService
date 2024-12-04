@@ -20,7 +20,6 @@ pub fn casdoor_auth() -> casdoor_rust_sdk::AuthService<'static> {
     casdoor_rust_sdk::AuthService::new(&config)
 }
 
-#[allow(unused)]
 pub(crate) async fn validator(
     req: ServiceRequest,
     credentials: BearerAuth,
@@ -37,6 +36,7 @@ pub(crate) async fn validator(
     Ok(req)
 }
 
+#[allow(unused)]
 pub(crate) async fn parse_jwt(
     req: ServiceRequest,
     credentials: BearerAuth,

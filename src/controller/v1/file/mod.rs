@@ -50,18 +50,15 @@ pub async fn upload(mut payload: MultipartForm<UploadForm>) -> HttpResponse {
     };
 
     // save file to oss
-    s3::upload(
-        &book.id.to_string(),
-        "test", // TODO
-        // https://docs.rs/aws-sdk-s3/latest/aws_sdk_s3/?search=ByteStream
-        aws_sdk_s3::primitives::ByteStream::from(epub_buffer) // TODO
-    ).await.ok(); 
-
     // Output doc: https://docs.rs/aws-sdk-s3/latest/aws_sdk_s3/operation/put_object/struct.PutObjectOutput.html
     // Error doc: https://docs.rs/aws-sdk-s3/latest/aws_sdk_s3/operation/put_object/enum.PutObjectError.html
-    // TODO: 
-    // - [ ] do some checksum with output
-    // - [ ] handle error
+    // TODO: handle error
+    s3::upload(
+        &book.id.to_string(),
+        "tempfile",
+        // https://docs.rs/aws-sdk-s3/latest/aws_sdk_s3/?search=ByteStream
+        aws_sdk_s3::primitives::ByteStream::from(epub_buffer)
+    ).await.ok(); 
 
     // post book info to libre
     match post_book_info(book).await {
@@ -72,6 +69,17 @@ pub async fn upload(mut payload: MultipartForm<UploadForm>) -> HttpResponse {
     HttpResponse::Ok().json("upload")
 }
 
-pub async fn download() -> HttpResponse {
-    HttpResponse::Ok().json("download")
+pub async fn download(bookid: web::Path<i32>) -> HttpResponse {
+    let file_stream = match s3::download(&bookid.to_string(), "tempfile").await {
+            Ok(output) => output.body,
+            Err(_) => return HttpResponse::InternalServerError().json("Failed to download file!"),
+        };
+
+    let temp_file = file_stream.bytes().unwrap().to_vec();
+
+    
+    return HttpResponse::Ok()
+        .content_type("application/epub+zip")
+        .append_header(("Content-Disposition", format!("attachment; filename=\"{}.epub\"", bookid)))
+        .body(temp_file)
 }
