@@ -1,13 +1,23 @@
-use std::io::Read;
-
-use actix_web::HttpResponse;
-use actix_multipart::form::{tempfile::TempFile, MultipartForm};
+use crate::controller::s3;
 use crate::{models::epub::Epub, utils::http_util::post_book_info};
+use std::io::Read;
+use actix_multipart::form::MultipartForm;
+use actix_web::{web, HttpResponse};
+use file::UploadForm;
+pub mod file;
 
-use super::s3;
-#[derive(Debug, MultipartForm)]
-pub struct UploadForm {
-    pub file: TempFile,
+#[inline]
+pub fn service_config(cfg: &mut web::ServiceConfig) {
+    let middleware =
+        actix_web_httpauth::middleware::HttpAuthentication::bearer(crate::casdoor::validator);
+
+    cfg.service(
+        web::scope("/v1")
+        .wrap(middleware)
+        .route("/oss-temp-credential", web::get().to(oss_temp_credential))
+        .route("/upload", web::post().to(upload))
+        .route("/download", web::get().to(download))
+    );
 }
 
 
@@ -31,7 +41,7 @@ pub async fn upload(mut payload: MultipartForm<UploadForm>) -> HttpResponse {
     // parse epub
     let mut epub_buffer = Vec::new();
     payload.file.file.read_to_end(&mut epub_buffer)
-        .map_err(|err| Box::new(err)).unwrap();
+        .map_err(|err| HttpResponse::BadRequest().json(err.to_string())).unwrap();
 
     let mut epub = Epub::new(epub_buffer.clone());
     let book =  match epub.parse_book() {
@@ -40,7 +50,6 @@ pub async fn upload(mut payload: MultipartForm<UploadForm>) -> HttpResponse {
     };
 
     // save file to oss
-
     s3::upload(
         &book.id.to_string(),
         "test", // TODO
