@@ -1,8 +1,9 @@
-use crate::controller::s3;
-use crate::{models::epub::Epub, utils::http_util::post_book_info};
+use crate::{controller::s3, utils::http_util::post_book_info};
+use crate::models::epub::Epub;
 use std::io::Read;
 use actix_multipart::form::MultipartForm;
 use actix_web::{web, HttpResponse};
+use aws_sdk_s3::Client;
 use file::UploadForm;
 pub mod file;
 
@@ -16,14 +17,15 @@ pub fn service_config(cfg: &mut web::ServiceConfig) {
         .wrap(middleware)
         .route("/oss-temp-credential", web::get().to(oss_temp_credential))
         .route("/upload", web::post().to(upload))
-        .route("/download", web::get().to(download))
+        .route("/download/{bookid}", web::get().to(download))
     );
 }
 
 
-pub async fn oss_temp_credential() -> HttpResponse {
+pub async fn oss_temp_credential(client: web::Data<Client>) -> HttpResponse {
     HttpResponse::Ok().json(
         s3::get_presigned_download_url(
+            &client,
             "test", // TODO
             "test", // TODO
             std::time::Duration::from_secs(60) // TODO
@@ -37,7 +39,7 @@ pub async fn oss_temp_credential() -> HttpResponse {
     )
 }
 
-pub async fn upload(mut payload: MultipartForm<UploadForm>) -> HttpResponse {
+pub async fn upload(mut payload: MultipartForm<UploadForm>, client: web::Data<Client>) -> HttpResponse {
     // parse epub
     let mut epub_buffer = Vec::new();
     payload.file.file.read_to_end(&mut epub_buffer)
@@ -54,8 +56,9 @@ pub async fn upload(mut payload: MultipartForm<UploadForm>) -> HttpResponse {
     // Error doc: https://docs.rs/aws-sdk-s3/latest/aws_sdk_s3/operation/put_object/enum.PutObjectError.html
     // TODO: handle error
     s3::upload(
+        &client,
         &book.id.to_string(),
-        "tempfile",
+        "librebooks",
         // https://docs.rs/aws-sdk-s3/latest/aws_sdk_s3/?search=ByteStream
         aws_sdk_s3::primitives::ByteStream::from(epub_buffer)
     ).await.ok(); 
@@ -69,17 +72,26 @@ pub async fn upload(mut payload: MultipartForm<UploadForm>) -> HttpResponse {
     HttpResponse::Ok().json("upload")
 }
 
-pub async fn download(bookid: web::Path<i32>) -> HttpResponse {
-    let file_stream = match s3::download(&bookid.to_string(), "tempfile").await {
+pub async fn download(bookid: web::Path<i32>, client: web::Data<Client>) -> HttpResponse {
+    // info!("download book: {}", bookid);
+    let mut file_stream = match s3::download(
+        &client,
+        &bookid.to_string(),
+        "librebooks").await {
             Ok(output) => output.body,
             Err(_) => return HttpResponse::InternalServerError().json("Failed to download file!"),
         };
-
-    let temp_file = file_stream.bytes().unwrap().to_vec();
+    
+    let mut temp_stream = Vec::new();
+    while let Ok(Some(bytes)) = file_stream.try_next().await.map_err(|err| {
+        HttpResponse::InternalServerError().json(err.to_string())
+    }) {
+        temp_stream.extend_from_slice(&bytes);
+    }
 
     
     return HttpResponse::Ok()
         .content_type("application/epub+zip")
         .append_header(("Content-Disposition", format!("attachment; filename=\"{}.epub\"", bookid)))
-        .body(temp_file)
+        .body(temp_stream)
 }
