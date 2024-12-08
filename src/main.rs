@@ -1,6 +1,5 @@
 use actix_web::{web, App, HttpServer};
 
-mod models;
 mod routes;
 mod controller;
 mod utils;
