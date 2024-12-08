@@ -1,7 +1,6 @@
-use std::default;
-
 use serde::{Deserialize, Serialize};
 use chrono::NaiveDate;
+use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Book {
@@ -14,6 +13,22 @@ pub struct Book {
     pub status: i32,
     pub description: String,
     pub added_date: NaiveDate,
+}
+
+impl Default for Book {
+    fn default() -> Self {
+        Self {
+            id: Uuid::new_v4().to_string(),
+            file_url: "".to_string(),
+            cover_url: "".to_string(),
+            title: "".to_string(),
+            author: "".to_string(),
+            rating: 0.0,
+            status: 0,
+            description: "".to_string(),
+            added_date: chrono::Local::now().naive_local().date()
+        }
+    }
 }
 
 pub struct Cover {

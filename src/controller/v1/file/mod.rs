@@ -1,6 +1,6 @@
 use crate::{
-    controller::{s3, v1::parse::parse},
-    utils::{filename_parse::parse_filetype, http_util::post_book_info},
+    controller::{s3, v1::parse::{parse, parse_filetype}},
+    utils::http_util::post_book_info,
 };
 use actix_multipart::form::MultipartForm;
 use actix_web::{web, HttpResponse};
@@ -10,6 +10,7 @@ use log::info;
 use std::io::Read;
 
 pub mod file;
+pub mod uploader;
 
 #[inline]
 pub fn service_config(cfg: &mut web::ServiceConfig) {
@@ -18,7 +19,7 @@ pub fn service_config(cfg: &mut web::ServiceConfig) {
 
     cfg.service(
         web::scope("/v1")
-            .wrap(middleware)
+            // .wrap(middleware)
             .route("/oss-temp-credential", web::get().to(oss_temp_credential))
             .route("/upload", web::post().to(upload))
             .route("/download/{bookid}", web::get().to(download)),
@@ -44,67 +45,21 @@ pub async fn oss_temp_credential(client: web::Data<Client>) -> HttpResponse {
 }
 
 pub async fn upload(
-    mut payload: MultipartForm<UploadForm>,
+    payload: MultipartForm<UploadForm>,
     client: web::Data<Client>,
 ) -> HttpResponse {
-    info!(
+    log::info!(
         "upload file:{:?}",
         parse_filetype(&payload.file.file_name.clone().unwrap())
     );
-    // parse epub
-    let mut epub_buffer = Vec::new();
-    payload
-        .file
-        .file
-        .read_to_end(&mut epub_buffer)
-        .map_err(|err| HttpResponse::BadRequest().json(err.to_string()))
-        .unwrap();
-
-    if let Some(res) = parse(
-        epub_buffer.clone(),
-        parse_filetype(&payload.file.file_name.clone().unwrap()),
-    )
-    .await
-    {
-        // upload epub
-
-        let book = res.0;
-        let cover = res.1;
-        // Output doc: https://docs.rs/aws-sdk-s3/latest/aws_sdk_s3/operation/put_object/struct.PutObjectOutput.html
-        // Error doc: https://docs.rs/aws-sdk-s3/latest/aws_sdk_s3/operation/put_object/enum.PutObjectError.html
-        // TODO: handle error
-        s3::upload(
-            &client,
-            &book.id.to_string(),
-            "librebooks",
-            // https://docs.rs/aws-sdk-s3/latest/aws_sdk_s3/?search=ByteStream
-            aws_sdk_s3::primitives::ByteStream::from(epub_buffer),
-        )
-        .await
-        .ok();
-
-        // save cover to oss
-        s3::upload(
-            &client,
-            &cover.id,
-            "librebooks",
-            aws_sdk_s3::primitives::ByteStream::from(cover.data.0),
-        )
-        .await
-        .ok();
-
-        // post book info to libre
-        match post_book_info(book).await {
-            Ok(_) => (),
-            Err(_) => return HttpResponse::InternalServerError().json("post book info failed"),
-        }
-
-        HttpResponse::Ok().json("upload")
-    } else {
-        return HttpResponse::InternalServerError().json("upload failed!");
+    match parse_filetype(&payload.file.file_name.clone().unwrap()) {
+        file::FileType::Epub => uploader::upload_epub(payload, client).await,
+        file::FileType::Pdf => uploader::upload_pdf(payload, client).await,
+        _ => HttpResponse::BadRequest().json("Unsupported file type!"),
     }
 }
 
+// todo: 类似upload进行重构
 pub async fn download(bookid: web::Path<i32>, client: web::Data<Client>) -> HttpResponse {
     // info!("download book: {}", bookid);
     let mut file_stream = match s3::download(&client, &bookid.to_string(), "librebooks").await {

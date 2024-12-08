@@ -21,3 +21,9 @@ pub async fn parse(file_buffer: Vec<u8>, file_type: FileType) -> Option<(Book, C
         FileType::Unknown => None,
     }
 }
+
+/// 文件类型解析
+pub fn parse_filetype(fname: &str) -> FileType {
+    let ext = fname.rsplit('.').next().unwrap_or_default();
+    FileType::from_str(ext)
+}
