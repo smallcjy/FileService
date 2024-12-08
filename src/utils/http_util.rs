@@ -2,7 +2,7 @@ use std::error::Error;
 use reqwest::Client;
 use std::env;
 
-use crate::models::model::Book;
+use crate::controller::v1::parse::book::Book;
 
 pub async fn post_book_info(book: Book) -> Result<(), Box<dyn Error>> {
     let api_url = env::var("POST_BOOK_INFO_URL").expect("POST_BOOK_INFO must be set");
