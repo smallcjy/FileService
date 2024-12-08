@@ -1,18 +1,17 @@
 use aws_sdk_s3::{operation::{get_object::GetObjectError, put_object::PutObjectError}, presigning::{PresignedRequest, PresigningConfig}};
 
-use super::S3_CLIENT;
-
 /// Get a presigned URL for uploading a file to S3
 /// 
 /// you can get the uri by calling [`uri()`] on the returned [`PresignedRequest`]
 /// 
 /// [`uri()`]: https://docs.rs/aws-sdk-s3/latest/aws_sdk_s3/presigning/struct.PresignedRequest.html#method.uri
 pub async fn get_presigned_download_url(
+    client: &aws_sdk_s3::Client,
     object: &str, 
     bucket: &str, 
     expire_in: std::time::Duration,
 ) -> Result<PresignedRequest, GetObjectError> {
-    S3_CLIENT
+    client
         .get_object()
         .bucket(bucket)
         .key(object)
@@ -35,11 +34,12 @@ pub async fn get_presigned_download_url(
 /// [`into_http_1x_request()`]: https://docs.rs/aws-sdk-s3/latest/aws_sdk_s3/presigning/struct.PresignedRequest.html#method.into_http_1x_request
 #[allow(dead_code)]
 pub async fn get_presigned_upload_url(
+    client: &aws_sdk_s3::Client,
     object: &str, 
     bucket: &str, 
     expire_in: std::time::Duration,
 ) -> Result<PresignedRequest, PutObjectError> {
-    S3_CLIENT
+    client
         .put_object()
         .bucket(bucket)
         .key(object)
@@ -61,11 +61,12 @@ mod tests {
 
     #[actix_rt::test]
     async fn test_get_presigned_download_url() {
+        let client = crate::controller::s3::s3_client().await;
         let object = "test.txt";
         let bucket = "test-bucket";
         let expire_in = std::time::Duration::from_secs(60);
 
-        let presigned_request = get_presigned_download_url(object, bucket, expire_in)
+        let presigned_request = get_presigned_download_url(&client, object, bucket, expire_in)
             .await
             .expect("Get presigned download url");
 
@@ -76,11 +77,12 @@ mod tests {
 
     #[actix_rt::test]
     async fn test_get_presigned_upload_url() {
+        let client  = crate::controller::s3::s3_client().await;
         let object = "test.txt";
         let bucket = "test-bucket";
         let expire_in = std::time::Duration::from_secs(60);
 
-        let presigned_request = get_presigned_upload_url(object, bucket, expire_in)
+        let presigned_request = get_presigned_upload_url(&client, object, bucket, expire_in)
             .await
             .expect("Get presigned upload url");
 
